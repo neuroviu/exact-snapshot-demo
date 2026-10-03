@@ -26,7 +26,13 @@ function ensureWorker() {
     if (m.type === "error" && !m.id) set({ status: "failed", error: m.message });
     if (m.id && pending.has(m.id)) { pending.get(m.id)!(m); pending.delete(m.id); }
   };
-  worker.onerror = (e) => set({ status: "failed", error: e.message || "Worker failed" });
+  worker.onerror = (e) => {
+    set({ status: "failed", error: e.message || "Worker failed" });
+    // Never leave a draft waiting forever: release pending requests so the keyword fallback runs.
+    pending.forEach((r) => r({ type: "error", message: "Worker failed" }));
+    pending.clear();
+    worker = null;
+  };
   return worker;
 }
 
@@ -85,7 +91,12 @@ export async function createDraft(text: string, lang: Lang): Promise<Draft> {
   const basic = analyze(text, lang);
   if (state.status !== "ready" || !worker) return { ...basic, engine: "basic" };
   const id = crypto.randomUUID();
-  const res: any = await new Promise((r) => { pending.set(id, r); worker!.postMessage({ type: "extract", id, text, lang }); });
+  const res: any = await new Promise((r) => {
+    pending.set(id, r);
+    // Safety timeout: if the model stalls (e.g. offline file missing), fall back after 4 minutes.
+    setTimeout(() => { if (pending.has(id)) { pending.delete(id); r({ type: "error" }); } }, 240_000);
+    try { worker!.postMessage({ type: "extract", id, text, lang }); } catch { pending.delete(id); r({ type: "error" }); }
+  });
   const summary = res.type === "result" ? parseModelOutput(res.raw, lang) : null;
   if (!summary) return { ...basic, engine: "basic" };
   // Follow-up questions are prompts for the health worker, not patient facts; keep the standard checklist if the model gave none.
