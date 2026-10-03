@@ -68,7 +68,7 @@ The system does not diagnose patients, generate differential diagnoses, prescrib
 
 Offline-First Design
 
-NeuroViu Bridge is implemented as a Progressive Web App designed to remain usable after required application resources have been cached.
+NeuroViu Bridge is implemented as a Progressive Web App with offline-first architecture. Offline behavior is currently device- and browser-dependent and remains under active prototype testing.
 
 Core capabilities include:
 
