@@ -27,6 +27,9 @@ export const T = {
     how: "How it works",
     online: "Online",
     offline: "Offline",
+    offlineBanner: "Offline mode — your work is being saved on this device.",
+    simulate: "Demo: Simulate Offline",
+    simulated: "(simulated)",
     back: "Back",
     chooseLang: "Choose encounter language",
     patientRef: "Patient reference (initials or ID)",
@@ -76,6 +79,9 @@ export const T = {
     how: "Comment ça marche",
     online: "En ligne",
     offline: "Hors ligne",
+    offlineBanner: "Mode hors ligne — votre travail est enregistré sur cet appareil.",
+    simulate: "Démo : simuler hors ligne",
+    simulated: "(simulé)",
     back: "Retour",
     chooseLang: "Choisir la langue de la consultation",
     patientRef: "Référence patient (initiales ou ID)",
@@ -179,29 +185,27 @@ export function analyze(text: string, lang: Lang): { summary: Summary; emergency
   };
 }
 
-const KEY = "nvb.encounters.v1";
-export function loadEncounters(): Encounter[] {
+import { getAll, putMany, persistStorage } from "./db";
+
+const LEGACY_KEY = "nvb.encounters.v1";
+export async function loadEncounters(): Promise<Encounter[]> {
+  void persistStorage();
+  let list = await getAll();
+  if (list.length) return list;
+  // migrate earlier localStorage records, else seed sample data
   try {
-    const raw = localStorage.getItem(KEY);
-    if (raw) return JSON.parse(raw);
+    const raw = localStorage.getItem(LEGACY_KEY);
+    if (raw) { list = JSON.parse(raw); localStorage.removeItem(LEGACY_KEY); }
   } catch {}
-  const seed: Encounter[] = [
-    {
-      id: "seed1", patientRef: "AK-0412", lang: "en", emergency: false, status: "synced",
-      createdAt: new Date(Date.now() - 864e5 * 2).toISOString(),
-      transcript: SAMPLES.en,
-      summary: analyze(SAMPLES.en, "en").summary,
-    },
-    {
-      id: "seed2", patientRef: "MD-0098", lang: "fr", emergency: false, status: "pending",
-      createdAt: new Date(Date.now() - 36e5 * 5).toISOString(),
-      transcript: SAMPLES.fr,
-      summary: analyze(SAMPLES.fr, "fr").summary,
-    },
+  if (!list.length) list = [
+    { id: "seed1", patientRef: "AK-0412", lang: "en", emergency: false, status: "synced",
+      createdAt: new Date(Date.now() - 864e5 * 2).toISOString(), transcript: SAMPLES.en, summary: analyze(SAMPLES.en, "en").summary },
+    { id: "seed2", patientRef: "MD-0098", lang: "fr", emergency: false, status: "pending",
+      createdAt: new Date(Date.now() - 36e5 * 5).toISOString(), transcript: SAMPLES.fr, summary: analyze(SAMPLES.fr, "fr").summary },
   ];
-  saveEncounters(seed);
-  return seed;
+  await putMany(list);
+  return getAll();
 }
-export function saveEncounters(list: Encounter[]) {
-  localStorage.setItem(KEY, JSON.stringify(list));
+export async function saveEncounters(list: Encounter[]) {
+  await putMany(list);
 }
