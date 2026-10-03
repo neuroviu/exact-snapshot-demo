@@ -12,8 +12,24 @@ let device = "";
 
 const post = (m: unknown) => (self as unknown as Worker).postMessage(m);
 
-async function load() {
-  if (gen) return post({ type: "ready", model: MODEL_ID, device });
+/** True when the model weights are stored in this device's browser cache (needed for offline use). */
+async function modelSaved(): Promise<boolean> {
+  try {
+    const c = await caches.open(env.cacheKey);
+    const keys = await c.keys();
+    return keys.some((r) => r.url.includes(MODEL_ID) && r.url.endsWith(".onnx"));
+  } catch {
+    return false;
+  }
+}
+
+class OfflineMissing extends Error {}
+
+async function load(online = true) {
+  if (gen) return post({ type: "ready", model: MODEL_ID, device, saved: await modelSaved() });
+  // Offline: never try the network — fail fast with a clear reason if the files weren't saved.
+  env.allowRemoteModels = online;
+  if (!online && !(await modelSaved())) throw new OfflineMissing("Model files are not saved on this device.");
   // Use WebGPU only when the adapter supports f16 shaders (needed by the q4f16 weights).
   const adapter = (self.navigator as any).gpu ? await (self.navigator as any).gpu.requestAdapter().catch(() => null) : null;
   const hasGPU = !!adapter && adapter.features?.has?.("shader-f16");
@@ -28,12 +44,17 @@ async function load() {
     }
   };
   device = hasGPU ? "webgpu" : "wasm";
-  gen = (await pipeline("text-generation", MODEL_ID, {
-    device: device as any,
-    dtype: hasGPU ? "q4f16" : "q4",
-    progress_callback,
-  })) as TextGenerationPipeline;
-  post({ type: "ready", model: MODEL_ID, device });
+  try {
+    gen = (await pipeline("text-generation", MODEL_ID, {
+      device: device as any,
+      dtype: hasGPU ? "q4f16" : "q4",
+      progress_callback,
+    })) as TextGenerationPipeline;
+  } catch (err) {
+    if (!online) throw new OfflineMissing(err instanceof Error ? err.message : String(err));
+    throw err;
+  }
+  post({ type: "ready", model: MODEL_ID, device, saved: await modelSaved() });
 }
 
 function prompt(text: string, lang: "en" | "fr") {

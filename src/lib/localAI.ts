@@ -125,12 +125,14 @@ export async function createDraft(text: string, lang: Lang): Promise<Draft> {
   const basic = analyze(text, lang);
   if (state.status !== "ready" || !worker) return { ...basic, engine: "basic" };
   const id = crypto.randomUUID();
+  ls.set(BUSY_KEY, "1");
   const res: any = await new Promise((r) => {
     pending.set(id, r);
     // Safety timeout: if the model stalls (e.g. offline file missing), fall back after 4 minutes.
     setTimeout(() => { if (pending.has(id)) { pending.delete(id); r({ type: "error" }); } }, 240_000);
     try { worker!.postMessage({ type: "extract", id, text, lang }); } catch { pending.delete(id); r({ type: "error" }); }
   });
+  ls.del(BUSY_KEY);
   const summary = res.type === "result" ? parseModelOutput(res.raw, lang) : null;
   if (!summary) return { ...basic, engine: "basic" };
   // Follow-up questions are prompts for the health worker, not patient facts; keep the standard checklist if the model gave none.
