@@ -72,6 +72,8 @@ export async function createDraft(text: string, lang: Lang): Promise<Draft> {
   const res: any = await new Promise((r) => { pending.set(id, r); worker!.postMessage({ type: "extract", id, text, lang }); });
   const summary = res.type === "result" ? parseModelOutput(res.raw, lang) : null;
   if (!summary) return { ...basic, engine: "basic" };
+  // Follow-up questions are prompts for the health worker, not patient facts; keep the standard checklist if the model gave none.
+  if (summary.missing === T[lang].nei) summary.missing = basic.summary.missing;
   // Danger-sign flag stays rule-based so it can never be missed by the model.
   return { summary, emergency: basic.emergency, engine: "model" };
 }
