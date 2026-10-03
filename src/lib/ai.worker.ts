@@ -8,7 +8,7 @@ env.useBrowserCache = true;
 // Phones (especially iPhone Safari) close the app if a page uses too much memory, so they get a smaller model.
 const UA = self.navigator.userAgent || "";
 const IS_PHONE = /iPhone|iPad|iPod|Android|Mobile/i.test(UA) || (self.navigator as any).maxTouchPoints > 1 && /Macintosh/.test(UA);
-export const MODEL_ID = IS_PHONE ? "HuggingFaceTB/SmolLM2-360M-Instruct" : "onnx-community/Qwen2.5-0.5B-Instruct";
+export const MODEL_ID = IS_PHONE ? "HuggingFaceTB/SmolLM2-135M-Instruct" : "onnx-community/Qwen2.5-0.5B-Instruct";
 
 let gen: TextGenerationPipeline | null = null;
 let device = "";
@@ -34,8 +34,9 @@ async function load(online = true) {
   env.allowRemoteModels = online;
   if (!online && !(await modelSaved())) throw new OfflineMissing("Model files are not saved on this device.");
   // Use WebGPU only when the adapter supports f16 shaders (needed by the q4f16 weights).
-  const adapter = (self.navigator as any).gpu ? await (self.navigator as any).gpu.requestAdapter().catch(() => null) : null;
-  const hasGPU = !!adapter && adapter.features?.has?.("shader-f16");
+  const adapter = !IS_PHONE && (self.navigator as any).gpu ? await (self.navigator as any).gpu.requestAdapter().catch(() => null) : null;
+  // Phones always use the plain processor path: WebGPU on iPhone Safari uses extra memory and can close the app.
+  const hasGPU = !IS_PHONE && !!adapter && adapter.features?.has?.("shader-f16");
   const files: Record<string, { loaded: number; total: number }> = {};
   const progress_callback = (p: any) => {
     if (p.status === "progress" && p.file) {
@@ -60,7 +61,31 @@ async function load(online = true) {
   post({ type: "ready", model: MODEL_ID, device, saved: await modelSaved() });
 }
 
+// Small phone model: a short instruction plus one worked example (it ignores long rule lists).
+// Anything it copies from the example is removed afterwards by the grounding check in localAI.ts.
+const SHOT = {
+  en: {
+    text: "I have had a headache for 2 days and I vomited this morning.",
+    out: { mainConcern: "Headache", duration: "2 days", symptomsReported: "headache, vomiting", relevantContext: "Not enough information", missingInformation: ["Age?", "Medicines taken?"], uncertainty: "medium" },
+  },
+  fr: {
+    text: "J'ai mal à la tête depuis 2 jours et j'ai vomi ce matin.",
+    out: { mainConcern: "Mal de tête", duration: "2 jours", symptomsReported: "mal de tête, vomissements", relevantContext: "Informations insuffisantes", missingInformation: ["Âge ?", "Médicaments pris ?"], uncertainty: "medium" },
+  },
+};
+function smallPrompt(text: string, lang: "en" | "fr") {
+  const nei = lang === "fr" ? "Informations insuffisantes" : "Not enough information";
+  const s = SHOT[lang];
+  return [
+    { role: "system", content: `Copy facts from the patient text into JSON. Use only words from the text. No diagnosis. If not stated write "${nei}".` },
+    { role: "user", content: `Patient text: "${s.text}"` },
+    { role: "assistant", content: JSON.stringify(s.out) },
+    { role: "user", content: `Patient text: "${text}"` },
+  ];
+}
+
 function prompt(text: string, lang: "en" | "fr") {
+  if (IS_PHONE) return smallPrompt(text, lang);
   const nei = lang === "fr" ? "Informations insuffisantes" : "Not enough information";
   const sys = `You are a documentation assistant for health workers. Your ONLY job is to extract information that the patient explicitly stated and put it into JSON.
 Rules:

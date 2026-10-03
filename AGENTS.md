@@ -12,4 +12,4 @@
 - Encounters persist in IndexedDB (src/lib/db.ts), not localStorage. Why: durable offline storage across app restarts.
 - On-device AI: Transformers.js runs in a Web Worker (src/lib/ai.worker.ts) wrapped by src/lib/localAI.ts; model output is lexically grounded against the patient text and the keyword processor in bridge.ts stays as labelled fallback. Why: no cloud LLM, no UI freeze, no invented facts.
 - On-device AI start-up goes through startAI() in src/lib/localAI.ts, which skips auto-loading when a busy flag survived a previous run. Why: phones that run out of memory loading the model would otherwise crash on every reopen.
-- Phones load a smaller on-device model than desktops (chosen by user agent in src/lib/ai.worker.ts). Why: iPhone Safari closes pages that use too much memory.
+- Phones load a smaller on-device model than desktops, on the CPU path only and with a one-example prompt (src/lib/ai.worker.ts). Why: iPhone Safari closes pages that use too much memory, and small models ignore long rule lists.
