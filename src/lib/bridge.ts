@@ -146,7 +146,7 @@ function duration(text: string, lang: Lang): string | null {
     ? /(\d+|one|two|three|four|five|six|seven|a)\s+(day|days|week|weeks|month|months)/i
     : /(\d+|un|une|deux|trois|quatre|cinq|six|sept)\s+(jour|jours|semaine|semaines|mois)/i;
   const m = text.match(re);
-  if (m) return `${NUMW[m[1].toLowerCase()] ?? (m[1] === "a" ? "1" : m[1])} ${m[2]}`;
+  if (m) return `${NUMW[(m[1] ?? "").toLowerCase()] ?? (m[1] === "a" ? "1" : m[1])} ${m[2]}`;
   if (/yesterday|hier/i.test(text)) return lang === "en" ? "since yesterday" : "depuis hier";
   if (/this morning|ce matin/i.test(text)) return lang === "en" ? "since this morning" : "depuis ce matin";
   return null;
