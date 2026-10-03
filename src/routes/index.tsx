@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
+import { registerServiceWorker } from "@/lib/pwa";
 import {
   analyze, loadEncounters, saveEncounters, SAMPLES, T,
   type Encounter, type Lang, type Summary,
@@ -22,29 +23,33 @@ export const Route = createFileRoute("/")({
 type Screen = "home" | "lang" | "input" | "processing" | "review" | "done" | "saved" | "how";
 
 function useOnline() {
-  const [on, setOn] = useState(true);
+  const [real, setReal] = useState(true);
+  const [sim, setSim] = useState(false);
   useEffect(() => {
-    setOn(navigator.onLine);
-    const u = () => setOn(navigator.onLine);
+    setReal(navigator.onLine);
+    const u = () => setReal(navigator.onLine);
     window.addEventListener("online", u);
     window.addEventListener("offline", u);
     return () => { window.removeEventListener("online", u); window.removeEventListener("offline", u); };
   }, []);
-  return [on, setOn] as const;
+  return { online: real && !sim, real, sim, setSim };
 }
 
 function App() {
   const [screen, setScreen] = useState<Screen>("home");
   const [lang, setLang] = useState<Lang>("en");
-  const [online, setOnline] = useOnline();
+  const { online, real, sim, setSim } = useOnline();
   const [list, setList] = useState<Encounter[]>([]);
   const [text, setText] = useState("");
   const [ref, setRef] = useState("");
   const [draft, setDraft] = useState<{ summary: Summary; emergency: boolean } | null>(null);
   const t = T[lang];
 
-  useEffect(() => setList(loadEncounters()), []);
-  const persist = (l: Encounter[]) => { setList(l); saveEncounters(l); };
+  useEffect(() => {
+    void registerServiceWorker();
+    loadEncounters().then(setList).catch(console.error);
+  }, []);
+  const persist = (l: Encounter[]) => { setList(l); void saveEncounters(l); };
 
   const runAnalysis = () => {
     setScreen("processing");
@@ -69,16 +74,20 @@ function App() {
           <button onClick={() => setLang(lang === "en" ? "fr" : "en")} className="h-10 rounded-full border px-3 text-sm font-bold">
             {lang === "en" ? "FR" : "EN"}
           </button>
-          <button
-            onClick={() => setOnline(!online)}
-            aria-label="Toggle connectivity (demo)"
+          <span
+            role="status"
             className={`flex h-10 items-center gap-2 rounded-full px-3 text-sm font-bold ${online ? "bg-secondary text-secondary-foreground" : "bg-warning-soft text-accent-foreground"}`}
           >
             <span className={`h-2.5 w-2.5 rounded-full ${online ? "bg-success" : "bg-warning"}`} />
             {online ? t.online : t.offline}
-          </button>
+          </span>
         </div>
       </header>
+      {!online && (
+        <div role="status" className="bg-warning-soft px-4 py-2 text-center text-sm font-bold text-accent-foreground">
+          {t.offlineBanner} {real && sim ? t.simulated : ""}
+        </div>
+      )}
 
       <main className="flex-1 px-4 py-6">
         {screen === "home" && (
@@ -164,7 +173,13 @@ function App() {
         {screen === "how" && <How lang={lang} onBack={() => setScreen("home")} label={t.back} />}
       </main>
 
-      <footer className="px-4 py-4 text-center text-xs text-muted-foreground">NeuroViu Labs | Hack-Nation 2026</footer>
+      <footer className="space-y-2 px-4 py-4 text-center text-xs text-muted-foreground">
+        <label className="inline-flex min-h-10 items-center gap-2 rounded-full border bg-card px-3 font-bold">
+          <input type="checkbox" checked={sim} onChange={(e) => setSim(e.target.checked)} className="h-4 w-4 accent-primary" />
+          {t.simulate}
+        </label>
+        <p>NeuroViu Labs | Hack-Nation 2026</p>
+      </footer>
     </div>
   );
 }
