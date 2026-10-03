@@ -178,7 +178,7 @@ function App() {
           <input type="checkbox" checked={sim} onChange={(e) => setSim(e.target.checked)} className="h-4 w-4 accent-primary" />
           {t.simulate}
         </label>
-        <p>NeuroViu Labs | Hack-Nation 2026</p>
+        <p>NeuroViu Labs</p>
       </footer>
     </div>
   );
