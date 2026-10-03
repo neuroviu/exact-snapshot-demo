@@ -3,7 +3,7 @@ import { analyze, T, type Lang, type Summary } from "./bridge";
 
 export type AIStatus = "idle" | "loading" | "ready" | "failed";
 export type AIState = { status: AIStatus; progress: number; model?: string; device?: string; error?: string | undefined };
-export type Draft = { summary: Summary; emergency: boolean; engine: "model" | "basic" };
+export type Draft = { summary: Summary; emergency: boolean; engine: "model" | "basic"; grounded?: boolean };
 
 const READY_KEY = "nvb.ai.prepared";
 let worker: Worker | null = null;
@@ -90,10 +90,13 @@ export async function createDraft(text: string, lang: Lang): Promise<Draft> {
   if (!summary) return { ...basic, engine: "basic" };
   // Follow-up questions are prompts for the health worker, not patient facts; keep the standard checklist if the model gave none.
   const nei = T[lang].nei, b = basic.summary;
+  const before = [summary.mainConcern, summary.symptoms, summary.context, summary.duration];
   summary.mainConcern = keepGrounded(summary.mainConcern, text, /$^/, "", nei);
   summary.symptoms = keepGrounded(summary.symptoms, text, /[,;]\s*/, ", ", nei);
   summary.context = keepGrounded(summary.context, text, /(?<=[.!?])\s+|,\s(?=[A-ZÀ-Ý])/, " ", nei);
   summary.duration = keepGrounded(summary.duration, text, /$^/, "", nei);
+  const after = [summary.mainConcern, summary.symptoms, summary.context, summary.duration];
+  const groundingApplied = before.some((v, i) => v !== after[i]);
   // Where the model's text was not supported by the patient's words, fall back to the rule-based value.
   if (summary.mainConcern === nei) summary.mainConcern = b.mainConcern;
   if (summary.symptoms === nei) summary.symptoms = b.symptoms;
@@ -101,5 +104,5 @@ export async function createDraft(text: string, lang: Lang): Promise<Draft> {
   if (summary.duration === nei) summary.duration = b.duration;
   if (summary.missing === T[lang].nei) summary.missing = basic.summary.missing;
   // Danger-sign flag stays rule-based so it can never be missed by the model.
-  return { summary, emergency: basic.emergency, engine: "model" };
+  return { summary, emergency: basic.emergency, engine: "model", grounded: groundingApplied };
 }
