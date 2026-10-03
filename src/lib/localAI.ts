@@ -2,19 +2,46 @@
 import { analyze, T, type Lang, type Summary } from "./bridge";
 
 export type AIStatus = "idle" | "loading" | "ready" | "failed";
-export type AIState = { status: AIStatus; progress: number; model?: string; device?: string; error?: string | undefined };
+/** crashed = the app closed while the model was working (usually not enough memory); offline = model files not saved on this device. */
+export type AIFailReason = "crashed" | "offline" | "other";
+export type AIState = {
+  status: AIStatus; progress: number; model?: string; device?: string; error?: string | undefined;
+  reason?: AIFailReason | undefined; saved?: boolean | undefined;
+};
 export type Draft = { summary: Summary; emergency: boolean; engine: "model" | "basic"; grounded?: boolean };
 
 const READY_KEY = "nvb.ai.prepared";
+const BUSY_KEY = "nvb.ai.busy"; // set while the model loads or generates; left behind if the app is killed
 let worker: Worker | null = null;
 let state: AIState = { status: "idle", progress: 0 };
 const subs = new Set<(s: AIState) => void>();
 const pending = new Map<string, (m: any) => void>();
 
+const ls = {
+  get: (k: string) => { try { return localStorage.getItem(k); } catch { return null; } },
+  set: (k: string, v: string) => { try { localStorage.setItem(k, v); } catch {} },
+  del: (k: string) => { try { localStorage.removeItem(k); } catch {} },
+};
+
 function set(p: Partial<AIState>) { state = { ...state, ...p }; subs.forEach((f) => f(state)); }
 export const getAI = () => state;
 export function subscribeAI(f: (s: AIState) => void) { subs.add(f); f(state); return () => { subs.delete(f); }; }
-export const wasPrepared = () => { try { return localStorage.getItem(READY_KEY) === "1"; } catch { return false; } };
+export const wasPrepared = () => ls.get(READY_KEY) === "1";
+
+function fail(reason: AIFailReason, error?: string) {
+  ls.del(BUSY_KEY);
+  set({ status: "failed", reason, error });
+}
+
+/** Called once on app start. Auto-loads the saved model unless the last attempt crashed the app. */
+export function startAI() {
+  if (ls.get(BUSY_KEY)) {
+    // The app was closed mid-load/mid-draft last time — don't auto-load again, or it would crash in a loop.
+    fail("crashed");
+    return;
+  }
+  if (wasPrepared()) prepareAI();
+}
 
 function ensureWorker() {
   if (worker) return worker;
@@ -22,15 +49,20 @@ function ensureWorker() {
   worker.onmessage = (e) => {
     const m = e.data;
     if (m.type === "progress" && m.total) set({ progress: Math.min(99, Math.round((m.loaded / m.total) * 100)) });
-    if (m.type === "ready") { set({ status: "ready", progress: 100, model: m.model, device: m.device }); try { localStorage.setItem(READY_KEY, "1"); } catch {} }
-    if (m.type === "error" && !m.id) set({ status: "failed", error: m.message });
+    if (m.type === "ready") {
+      ls.del(BUSY_KEY);
+      set({ status: "ready", progress: 100, model: m.model, device: m.device, saved: m.saved, reason: undefined });
+      if (m.saved) ls.set(READY_KEY, "1");
+    }
+    if (m.type === "error" && !m.id) fail(m.code === "offline" ? "offline" : "other", m.message);
     if (m.id && pending.has(m.id)) { pending.get(m.id)!(m); pending.delete(m.id); }
   };
   worker.onerror = (e) => {
-    set({ status: "failed", error: e.message || "Worker failed" });
+    fail("other", e.message || "Worker failed");
     // Never leave a draft waiting forever: release pending requests so the keyword fallback runs.
     pending.forEach((r) => r({ type: "error", message: "Worker failed" }));
     pending.clear();
+    worker?.terminate();
     worker = null;
   };
   return worker;
@@ -38,9 +70,11 @@ function ensureWorker() {
 
 export function prepareAI() {
   if (state.status === "loading" || state.status === "ready") return;
-  set({ status: "loading", progress: 0, error: undefined });
-  try { ensureWorker().postMessage({ type: "load" }); }
-  catch (err) { set({ status: "failed", error: String(err) }); }
+  set({ status: "loading", progress: 0, error: undefined, reason: undefined });
+  ls.set(BUSY_KEY, "1");
+  void navigator.storage?.persist?.().catch(() => {});
+  try { ensureWorker().postMessage({ type: "load", online: navigator.onLine }); }
+  catch (err) { fail("other", String(err)); }
 }
 
 const pick = (v: unknown, nei: string) => {
