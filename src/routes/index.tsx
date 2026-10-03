@@ -445,7 +445,7 @@ function EdgeStatus({ lang, ai }: { lang: Lang; ai: AIState }) {
   );
   const rows: [string, string][] = [
     [s.processing, s.onDevice],
-    [s.model, ai.model?.split("/").pop() ?? "—"],
+    [s.model, ai.model?.includes("SmolLM2") ? "SmolLM2-135M-Instruct (INT8)" : ai.model?.includes("Qwen") ? "Qwen2.5-0.5B-Instruct (quantized)" : "—"],
     [s.accel, ai.device === "webgpu" ? "WebGPU" : "WebAssembly (CPU)"],
     [s.net, s.no], [s.cloud, s.no], [s.grounding, s.active], [s.human, s.required], [s.dx, s.no],
   ];
