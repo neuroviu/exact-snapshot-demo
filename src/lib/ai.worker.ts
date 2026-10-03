@@ -28,6 +28,40 @@ async function modelSaved(): Promise<boolean> {
 
 class OfflineMissing extends Error {}
 
+/**
+ * Downloads model files directly into the browser cache as a stream, using the same keys the
+ * AI library looks up. The library holds a whole download in memory, which closes the app on iPhone.
+ */
+async function streamToCache(dtype: string): Promise<boolean> {
+  const cache = await caches.open(env.cacheKey);
+  const base = `${env.remoteHost}${env.remotePathTemplate.replaceAll("{model}", MODEL_ID).replaceAll("{revision}", "main")}`;
+  const names = ["config.json", "generation_config.json", "tokenizer.json", "tokenizer_config.json", `onnx/model_${dtype}.onnx`];
+  const todo: { url: string; res: Response; size: number }[] = [];
+  for (const n of names) {
+    const url = base + n;
+    if (await cache.match(url)) continue;
+    const res = await fetch(url);
+    if (!res.ok || !res.body) { if (n.startsWith("onnx/")) return false; continue; }
+    todo.push({ url, res, size: Number(res.headers.get("content-length")) || 0 });
+  }
+  const total = todo.reduce((a, f) => a + f.size, 0);
+  let loaded = 0, last = 0;
+  for (const f of todo) {
+    const counter = new TransformStream<Uint8Array, Uint8Array>({
+      transform(chunk, ctl) {
+        loaded += chunk.byteLength;
+        const now = Date.now();
+        if (total && now - last > 250) { last = now; post({ type: "progress", loaded, total }); }
+        ctl.enqueue(chunk);
+      },
+    });
+    const headers = new Headers(f.res.headers);
+    headers.delete("content-encoding"); headers.delete("content-length");
+    await cache.put(f.url, new Response(f.res.body!.pipeThrough(counter), { status: 200, headers }));
+  }
+  return true;
+}
+
 async function load(online = true) {
   if (gen) return post({ type: "ready", model: MODEL_ID, device, saved: await modelSaved() });
   // Offline: never try the network — fail fast with a clear reason if the files weren't saved.
@@ -48,11 +82,16 @@ async function load(online = true) {
     }
   };
   device = hasGPU ? "webgpu" : "wasm";
+  const dtype = hasGPU ? "q4f16" : IS_PHONE ? "int8" : "q4";
   try {
+    // Stream the big files straight to on-device storage first, so the download never sits in memory.
+    let streamed = false;
+    if (online) streamed = await streamToCache(dtype).catch(() => false);
     gen = (await pipeline("text-generation", MODEL_ID, {
       device: device as any,
-      dtype: hasGPU ? "q4f16" : IS_PHONE ? "int8" : "q4",
-      progress_callback,
+      dtype,
+      // Without a progress callback the library reads cached files in one go (less memory).
+      ...(streamed ? {} : { progress_callback }),
     })) as TextGenerationPipeline;
   } catch (err) {
     if (!online) throw new OfflineMissing(err instanceof Error ? err.message : String(err));
