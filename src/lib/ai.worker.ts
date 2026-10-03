@@ -5,7 +5,10 @@ import { pipeline, env, type TextGenerationPipeline } from "@huggingface/transfo
 env.allowLocalModels = false;
 env.useBrowserCache = true;
 
-export const MODEL_ID = "onnx-community/Qwen2.5-0.5B-Instruct";
+// Phones (especially iPhone Safari) close the app if a page uses too much memory, so they get a smaller model.
+const UA = self.navigator.userAgent || "";
+const IS_PHONE = /iPhone|iPad|iPod|Android|Mobile/i.test(UA) || (self.navigator as any).maxTouchPoints > 1 && /Macintosh/.test(UA);
+export const MODEL_ID = IS_PHONE ? "HuggingFaceTB/SmolLM2-360M-Instruct" : "onnx-community/Qwen2.5-0.5B-Instruct";
 
 let gen: TextGenerationPipeline | null = null;
 let device = "";
@@ -47,7 +50,7 @@ async function load(online = true) {
   try {
     gen = (await pipeline("text-generation", MODEL_ID, {
       device: device as any,
-      dtype: hasGPU ? "q4f16" : "q4",
+      dtype: hasGPU ? "q4f16" : IS_PHONE ? "int8" : "q4",
       progress_callback,
     })) as TextGenerationPipeline;
   } catch (err) {
