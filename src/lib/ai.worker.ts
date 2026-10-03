@@ -14,7 +14,9 @@ const post = (m: unknown) => (self as unknown as Worker).postMessage(m);
 
 async function load() {
   if (gen) return post({ type: "ready", model: MODEL_ID, device });
-  const hasGPU = !!(self.navigator as any).gpu && !!(await (self.navigator as any).gpu.requestAdapter().catch(() => null));
+  // Use WebGPU only when the adapter supports f16 shaders (needed by the q4f16 weights).
+  const adapter = (self.navigator as any).gpu ? await (self.navigator as any).gpu.requestAdapter().catch(() => null) : null;
+  const hasGPU = !!adapter && adapter.features?.has?.("shader-f16");
   const files: Record<string, { loaded: number; total: number }> = {};
   const progress_callback = (p: any) => {
     if (p.status === "progress" && p.file) {
