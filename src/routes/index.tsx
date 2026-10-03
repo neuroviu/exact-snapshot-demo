@@ -6,7 +6,7 @@ import {
   type Encounter, type Lang, type Summary,
 } from "@/lib/bridge";
 import { edge } from "@/lib/edge";
-import { createDraft, getAI, prepareAI, subscribeAI, wasPrepared, type AIState } from "@/lib/localAI";
+import { createDraft, getAI, prepareAI, startAI, subscribeAI, type AIState } from "@/lib/localAI";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -49,7 +49,7 @@ function App() {
   const t = T[lang];
   useEffect(() => {
     const un = subscribeAI(setAI);
-    if (wasPrepared()) prepareAI(); // loads from on-device cache
+    startAI(); // loads from on-device cache, unless the last attempt closed the app
     return un;
   }, []);
 
@@ -231,11 +231,12 @@ function AISetup({ t, ai }: { t: TT; ai: AIState }) {
         <div className="h-2 overflow-hidden rounded-full bg-muted"><div className="h-full bg-primary transition-all" style={{ width: `${ai.progress}%` }} /></div>
         <p className="text-sm text-muted-foreground">{t.aiPreparingSub}</p>
       </>)}
-      {ai.status === "ready" && (
+      {ai.status === "ready" && (<>
         <p className="flex items-center gap-2 font-bold text-primary"><span className="h-2.5 w-2.5 rounded-full bg-success" />{t.aiReady}</p>
-      )}
+        {ai.saved === false && <p className="text-sm text-muted-foreground">{t.aiNotSaved}</p>}
+      </>)}
       {ai.status === "failed" && (<>
-        <p className="font-bold">{t.aiFailed}</p>
+        <p className="font-bold">{ai.reason === "crashed" ? t.aiCrashed : ai.reason === "offline" ? t.aiOfflineMissing : t.aiFailed}</p>
         <p className="text-sm text-muted-foreground">{t.basicMode} — {t.basicModeSub}</p>
         <Btn variant="ghost" onClick={prepareAI}>{t.aiRetry}</Btn>
       </>)}

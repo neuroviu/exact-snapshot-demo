@@ -75,17 +75,18 @@ Return ONLY one JSON object with keys: mainConcern, duration, symptomsReported, 
 }
 
 self.onmessage = async (e: MessageEvent) => {
-  const { type, id, text, lang } = e.data ?? {};
+  const { type, id, text, lang, online } = e.data ?? {};
   try {
-    if (type === "load") await load();
+    if (type === "load") await load(online !== false);
     if (type === "extract") {
-      await load();
+      if (!gen) await load(self.navigator.onLine);
       const out: any = await gen!(prompt(text, lang) as any, { max_new_tokens: 320, do_sample: false });
       const msgs = out?.[0]?.generated_text;
       const raw = Array.isArray(msgs) ? msgs.at(-1)?.content ?? "" : String(msgs ?? "");
       post({ type: "result", id, raw });
     }
   } catch (err) {
-    post({ type: "error", id, message: err instanceof Error ? err.message : String(err) });
+    const code = err instanceof OfflineMissing ? "offline" : "other";
+    post({ type: "error", id, code, message: err instanceof Error ? err.message : String(err) });
   }
 };
