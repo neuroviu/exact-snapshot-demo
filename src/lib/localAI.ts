@@ -2,7 +2,7 @@
 import { analyze, T, type Lang, type Summary } from "./bridge";
 
 export type AIStatus = "idle" | "loading" | "ready" | "failed";
-export type AIState = { status: AIStatus; progress: number; model?: string; device?: string; error?: string };
+export type AIState = { status: AIStatus; progress: number; model?: string; device?: string; error?: string | undefined };
 export type Draft = { summary: Summary; emergency: boolean; engine: "model" | "basic" };
 
 const READY_KEY = "nvb.ai.prepared";
