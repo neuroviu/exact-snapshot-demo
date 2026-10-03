@@ -8,7 +8,7 @@ env.useBrowserCache = true;
 // Phones (especially iPhone Safari) close the app if a page uses too much memory, so they get a smaller model.
 const UA = self.navigator.userAgent || "";
 const IS_PHONE = /iPhone|iPad|iPod|Android|Mobile/i.test(UA) || (self.navigator as any).maxTouchPoints > 1 && /Macintosh/.test(UA);
-export const MODEL_ID = IS_PHONE ? "HuggingFaceTB/SmolLM2-360M-Instruct" : "onnx-community/Qwen2.5-0.5B-Instruct";
+export const MODEL_ID = IS_PHONE ? "HuggingFaceTB/SmolLM2-135M-Instruct" : "onnx-community/Qwen2.5-0.5B-Instruct";
 
 let gen: TextGenerationPipeline | null = null;
 let device = "";
@@ -34,8 +34,9 @@ async function load(online = true) {
   env.allowRemoteModels = online;
   if (!online && !(await modelSaved())) throw new OfflineMissing("Model files are not saved on this device.");
   // Use WebGPU only when the adapter supports f16 shaders (needed by the q4f16 weights).
-  const adapter = (self.navigator as any).gpu ? await (self.navigator as any).gpu.requestAdapter().catch(() => null) : null;
-  const hasGPU = !!adapter && adapter.features?.has?.("shader-f16");
+  const adapter = !IS_PHONE && (self.navigator as any).gpu ? await (self.navigator as any).gpu.requestAdapter().catch(() => null) : null;
+  // Phones always use the plain processor path: WebGPU on iPhone Safari uses extra memory and can close the app.
+  const hasGPU = !IS_PHONE && !!adapter && adapter.features?.has?.("shader-f16");
   const files: Record<string, { loaded: number; total: number }> = {};
   const progress_callback = (p: any) => {
     if (p.status === "progress" && p.file) {
