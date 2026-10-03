@@ -22,6 +22,10 @@ export async function registerServiceWorker() {
   }
   try {
     await navigator.serviceWorker.register("/sw.js", { scope: "/" });
+    // Warm the page cache so the app shell opens offline right after the first visit.
+    await navigator.serviceWorker.ready;
+    const cache = await caches.open("nvb-pages");
+    await cache.add(new Request("/", { cache: "reload" }));
   } catch (e) {
     console.warn("SW registration failed", e);
   }

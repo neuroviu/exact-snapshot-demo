@@ -8,3 +8,5 @@
 > Commits you push to the connected branch sync back to Lovable and show up in
 > the editor, so keep the branch in a working state.
 <!-- LOVABLE:END -->
+- Offline: vite-plugin-pwa generateSW writes sw.js into dist/client; registration only via src/lib/pwa.ts (guarded off in dev/preview). Why: SSR app has no index.html, so pages use NetworkFirst runtime cache warmed on registration.
+- Encounters persist in IndexedDB (src/lib/db.ts), not localStorage. Why: durable offline storage across app restarts.
