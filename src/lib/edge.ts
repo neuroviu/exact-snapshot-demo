@@ -40,7 +40,7 @@ export const EDGE = {
     tags: { real: "Working", sim: "Simulated", rule: "Rule-based" },
     limitsTitle: "Prototype limitations",
     limits: [
-      "Initial AI model download is about 140 MB on phones and 500 MB on computers.",
+      "Initial AI model download is about 370 MB on phones and 500 MB on computers.",
       "CPU inference may be slow on devices without WebGPU.",
       "Synchronization is simulated in the current prototype.",
       "Deterministic rules are intentionally used for selected safety behaviors.",
@@ -85,7 +85,7 @@ export const EDGE = {
     tags: { real: "Fonctionnel", sim: "Simulé", rule: "Par règles" },
     limitsTitle: "Limites du prototype",
     limits: [
-      "Le téléchargement initial du modèle fait environ 140 Mo sur téléphone et 500 Mo sur ordinateur.",
+      "Le téléchargement initial du modèle fait environ 370 Mo sur téléphone et 500 Mo sur ordinateur.",
       "L'inférence sur CPU peut être lente sans WebGPU.",
       "La synchronisation est simulée dans ce prototype.",
       "Des règles fixes sont volontairement utilisées pour certains comportements de sécurité.",

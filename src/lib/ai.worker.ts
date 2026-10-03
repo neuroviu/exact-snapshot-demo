@@ -61,7 +61,31 @@ async function load(online = true) {
   post({ type: "ready", model: MODEL_ID, device, saved: await modelSaved() });
 }
 
+// Small phone model: a short instruction plus one worked example (it ignores long rule lists).
+// Anything it copies from the example is removed afterwards by the grounding check in localAI.ts.
+const SHOT = {
+  en: {
+    text: "I have had a headache for 2 days and I vomited this morning.",
+    out: { mainConcern: "Headache", duration: "2 days", symptomsReported: "headache, vomiting", relevantContext: "Not enough information", missingInformation: ["Age?", "Medicines taken?"], uncertainty: "medium" },
+  },
+  fr: {
+    text: "J'ai mal à la tête depuis 2 jours et j'ai vomi ce matin.",
+    out: { mainConcern: "Mal de tête", duration: "2 jours", symptomsReported: "mal de tête, vomissements", relevantContext: "Informations insuffisantes", missingInformation: ["Âge ?", "Médicaments pris ?"], uncertainty: "medium" },
+  },
+};
+function smallPrompt(text: string, lang: "en" | "fr") {
+  const nei = lang === "fr" ? "Informations insuffisantes" : "Not enough information";
+  const s = SHOT[lang];
+  return [
+    { role: "system", content: `Copy facts from the patient text into JSON. Use only words from the text. No diagnosis. If not stated write "${nei}".` },
+    { role: "user", content: `Patient text: "${s.text}"` },
+    { role: "assistant", content: JSON.stringify(s.out) },
+    { role: "user", content: `Patient text: "${text}"` },
+  ];
+}
+
 function prompt(text: string, lang: "en" | "fr") {
+  if (IS_PHONE) return smallPrompt(text, lang);
   const nei = lang === "fr" ? "Informations insuffisantes" : "Not enough information";
   const sys = `You are a documentation assistant for health workers. Your ONLY job is to extract information that the patient explicitly stated and put it into JSON.
 Rules:
