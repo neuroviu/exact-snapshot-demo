@@ -74,7 +74,7 @@ function grounded(piece: string, source: string) {
   const hit = words.filter((w) => NUM.test(w) || src.includes(w.slice(0, Math.max(4, Math.min(6, w.length - 1))))).length;
   return hit / words.length >= 0.6;
 }
-function keepGrounded(value: string, source: string, sep: RegExp, joiner: string, nei: string) {
+export function keepGrounded(value: string, source: string, sep: RegExp, joiner: string, nei: string) {
   if (value === nei) return value;
   const parts = value.split(sep).map((p) => p.trim()).filter(Boolean).filter((p) => grounded(p, source));
   return parts.length ? parts.join(joiner) : nei;
