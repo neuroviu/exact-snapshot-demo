@@ -133,6 +133,7 @@ export async function createDraft(text: string, lang: Lang): Promise<Draft> {
     try { worker!.postMessage({ type: "extract", id, text, lang }); } catch { pending.delete(id); r({ type: "error" }); }
   });
   ls.del(BUSY_KEY);
+  if (import.meta.env.DEV) console.debug("[ai raw]", res.type, res.raw ?? res.message);
   const summary = res.type === "result" ? parseModelOutput(res.raw, lang) : null;
   if (!summary) return { ...basic, engine: "basic" };
   // Follow-up questions are prompts for the health worker, not patient facts; keep the standard checklist if the model gave none.
