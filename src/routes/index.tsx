@@ -2,9 +2,10 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { registerServiceWorker } from "@/lib/pwa";
 import {
-  analyze, loadEncounters, saveEncounters, SAMPLES, T,
+  loadEncounters, saveEncounters, SAMPLES, T,
   type Encounter, type Lang, type Summary,
 } from "@/lib/bridge";
+import { createDraft, getAI, prepareAI, subscribeAI, wasPrepared, type AIState } from "@/lib/localAI";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -42,8 +43,14 @@ function App() {
   const [list, setList] = useState<Encounter[]>([]);
   const [text, setText] = useState("");
   const [ref, setRef] = useState("");
-  const [draft, setDraft] = useState<{ summary: Summary; emergency: boolean } | null>(null);
+  const [draft, setDraft] = useState<DraftT | null>(null);
+  const [ai, setAI] = useState<AIState>(getAI());
   const t = T[lang];
+  useEffect(() => {
+    const un = subscribeAI(setAI);
+    if (wasPrepared()) prepareAI(); // loads from on-device cache
+    return un;
+  }, []);
 
   useEffect(() => {
     void registerServiceWorker();
@@ -53,7 +60,12 @@ function App() {
 
   const runAnalysis = () => {
     setScreen("processing");
-    setTimeout(() => { setDraft(analyze(text, lang)); setScreen("review"); }, 1600);
+    const started = Date.now();
+    void createDraft(text, lang).then(async (d) => {
+      const wait = 1200 - (Date.now() - started);
+      if (wait > 0) await new Promise((r) => setTimeout(r, wait));
+      setDraft(d); setScreen("review");
+    });
   };
   const approve = () => {
     if (!draft) return;
@@ -109,6 +121,7 @@ function App() {
               </Btn>
               <Btn variant="ghost" onClick={() => setScreen("how")}>{t.how}</Btn>
             </div>
+            <AISetup t={t} ai={ai} />
             <Emergency t={t} />
             <p className="text-sm text-muted-foreground">{t.notDx}</p>
           </div>
@@ -151,6 +164,7 @@ function App() {
             <div className="h-14 w-14 animate-spin rounded-full border-4 border-secondary border-t-primary" />
             <p className="text-xl font-bold">{t.processing}</p>
             <p className="text-muted-foreground">{t.processingSub}</p>
+            {ai.status !== "ready" && <p className="text-sm text-muted-foreground">{t.basicMode}</p>}
           </div>
         )}
 
@@ -170,7 +184,7 @@ function App() {
 
         {screen === "saved" && <Saved t={t} list={list} persist={persist} online={online} onBack={() => setScreen("home")} />}
 
-        {screen === "how" && <How lang={lang} onBack={() => setScreen("home")} label={t.back} />}
+        {screen === "how" && <How lang={lang} ai={ai} onBack={() => setScreen("home")} label={t.back} />}
       </main>
 
       <footer className="space-y-2 px-4 py-4 text-center text-xs text-muted-foreground">
@@ -185,6 +199,57 @@ function App() {
 }
 
 type TT = (typeof T)[Lang];
+type DraftT = { summary: Summary; emergency: boolean; engine: "model" | "basic" };
+
+function AISetup({ t, ai }: { t: TT; ai: AIState }) {
+  return (
+    <div className="space-y-3 rounded-xl border bg-card p-4">
+      {ai.status === "idle" && (<>
+        <p className="font-bold">{t.aiPrepare}</p>
+        <p className="text-sm text-muted-foreground">{t.aiPreparingSub} {t.aiSize}</p>
+        <Btn variant="secondary" onClick={prepareAI}>{t.aiPrepare}</Btn>
+        <p className="text-sm text-muted-foreground">{t.basicMode} — {t.basicModeSub}</p>
+      </>)}
+      {ai.status === "loading" && (<>
+        <p className="font-bold">{t.aiPreparing}… {ai.progress}%</p>
+        <div className="h-2 overflow-hidden rounded-full bg-muted"><div className="h-full bg-primary transition-all" style={{ width: `${ai.progress}%` }} /></div>
+        <p className="text-sm text-muted-foreground">{t.aiPreparingSub}</p>
+      </>)}
+      {ai.status === "ready" && (
+        <p className="flex items-center gap-2 font-bold text-primary"><span className="h-2.5 w-2.5 rounded-full bg-success" />{t.aiReady}</p>
+      )}
+      {ai.status === "failed" && (<>
+        <p className="font-bold">{t.aiFailed}</p>
+        <p className="text-sm text-muted-foreground">{t.basicMode} — {t.basicModeSub}</p>
+        <Btn variant="ghost" onClick={prepareAI}>{t.aiRetry}</Btn>
+      </>)}
+      <p className="text-sm text-muted-foreground">{t.aiPrivacy}</p>
+      <AIDetails t={t} ai={ai} />
+    </div>
+  );
+}
+
+function AIDetails({ t, ai }: { t: TT; ai: AIState }) {
+  const d = t.det;
+  const rows: [string, string][] = [
+    [d.processing, d.onDevice],
+    [d.model, ai.status === "ready" ? `${d.lightweight} (${ai.model})` : d.notLoaded],
+    ...(ai.status === "ready" ? [[d.acc, ai.device === "webgpu" ? "WebGPU" : "WebAssembly (CPU)"] as [string, string]] : []),
+    [d.cloud, d.no],
+    [d.review, d.yes],
+    [d.dx, d.no],
+  ];
+  return (
+    <details className="rounded-lg border px-3 py-2 text-sm">
+      <summary className="cursor-pointer font-bold">{t.aiDetails}</summary>
+      <dl className="mt-2 space-y-1">
+        {rows.map(([k, v]) => (
+          <div key={k} className="flex justify-between gap-3"><dt className="text-muted-foreground">{k}</dt><dd className="text-right font-bold break-all">{v}</dd></div>
+        ))}
+      </dl>
+    </details>
+  );
+}
 
 function Btn({ variant = "primary", className = "", ...p }: React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: "primary" | "secondary" | "ghost" }) {
   const v = { primary: "bg-primary text-primary-foreground", secondary: "bg-secondary text-secondary-foreground", ghost: "border bg-card text-foreground" }[variant];
@@ -230,8 +295,8 @@ function Mic({ lang, t, onText }: { lang: Lang; t: TT; onText: (s: string) => vo
 }
 
 function Review({ t, draft, setDraft, onApprove, onBack }: {
-  t: TT; draft: { summary: Summary; emergency: boolean };
-  setDraft: (d: { summary: Summary; emergency: boolean }) => void; onApprove: () => void; onBack: () => void;
+  t: TT; draft: DraftT;
+  setDraft: (d: DraftT) => void; onApprove: () => void; onBack: () => void;
 }) {
   const [ok, setOk] = useState(false);
   const s = draft.summary;
@@ -240,6 +305,7 @@ function Review({ t, draft, setDraft, onApprove, onBack }: {
     <div className="space-y-4">
       <Back onClick={onBack} label={t.back} />
       <div className="rounded-xl bg-warning-soft p-3 text-center font-bold text-accent-foreground">⚠ {t.draftLabel}</div>
+      {draft.engine === "basic" && <p className="text-center text-sm text-muted-foreground">{t.basicMode} — {t.basicModeSub}</p>}
       {draft.emergency && <div className="rounded-xl border-2 border-destructive bg-card p-3 font-bold text-destructive">{t.emergencyFlag}</div>}
       <div className="rounded-xl border bg-card p-4">
         <div className="flex items-center justify-between">
@@ -313,7 +379,7 @@ function Saved({ t, list, persist, online, onBack }: { t: TT; list: Encounter[];
   );
 }
 
-function How({ lang, onBack, label }: { lang: Lang; onBack: () => void; label: string }) {
+function How({ lang, ai, onBack, label }: { lang: Lang; ai: AIState; onBack: () => void; label: string }) {
   const steps = lang === "en" ? [
     ["Works offline", "All core features run on the phone. No connection is needed to record, summarise, or save an encounter."],
     ["Small on-device AI", "A lightweight model turns the patient's words into a structured draft. It flags uncertainty and says “Not enough information” instead of guessing."],
@@ -337,6 +403,8 @@ function How({ lang, onBack, label }: { lang: Lang; onBack: () => void; label: s
           </li>
         ))}
       </ol>
+      <p className="text-sm text-muted-foreground">{T[lang].aiPrivacy}</p>
+      <AIDetails t={T[lang]} ai={ai} />
       <Emergency t={T[lang]} />
     </div>
   );

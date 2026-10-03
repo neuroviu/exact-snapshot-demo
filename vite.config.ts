@@ -26,11 +26,20 @@ export default defineConfig({
         workbox: {
           globDirectory: "dist/client",
           globPatterns: ["**/*.{js,css,png,ico,webmanifest,woff2,svg}"],
+          globIgnores: ["**/*.wasm", "**/ort-*.mjs"],
+          maximumFileSizeToCacheInBytes: 8 * 1024 * 1024,
           navigateFallback: null,
           cleanupOutdatedCaches: true,
           clientsClaim: true,
           skipWaiting: true,
           runtimeCaching: [
+            {
+              // onnxruntime WebAssembly files used by the on-device model
+              urlPattern: ({ url }) =>
+                url.origin === "https://cdn.jsdelivr.net" || /\.wasm$|\/ort-.*\.mjs$/.test(url.pathname),
+              handler: "CacheFirst",
+              options: { cacheName: "nvb-ai-runtime", expiration: { maxEntries: 20 } },
+            },
             {
               urlPattern: ({ request, url }) =>
                 request.mode === "navigate" && !url.pathname.startsWith("/~oauth"),
