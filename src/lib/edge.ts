@@ -27,9 +27,9 @@ export const EDGE = {
     demoIntro: "NeuroViu Bridge is not a healthcare chatbot. It is an offline-first, locally running, grounded, human-reviewed Small AI system for low-connectivity care.",
     features: [
       ["Offline-first PWA", "Installable; service worker caches the app so it opens without internet.", "real"],
-      ["Local Qwen 0.5B model", "Qwen2.5-0.5B-Instruct (4-bit), downloaded once and stored on the device.", "real"],
+      ["Local small language model", "Phones: SmolLM2-135M-Instruct (INT8, ~133 MiB). Computers: Qwen2.5-0.5B-Instruct (quantized; ~461 MiB q4f16 with WebGPU, ~750 MiB q4 on CPU). Downloaded once and cached for on-device inference.", "real"],
       ["English + French", "Input, prompts, drafts and interface in both languages.", "real"],
-      ["On-device inference", "Runs in a background worker via WebGPU, or CPU (WebAssembly) as fallback.", "real"],
+      ["On-device inference", "Transformers.js / ONNX Runtime Web in a background worker. Phones always use CPU (WebAssembly); computers use WebGPU where supported, with CPU fallback. No internet needed after preparation.", "real"],
       ["Grounding safeguard", "Model output is checked word-by-word against the patient's text; unsupported parts are dropped.", "real"],
       ["Human-in-the-loop approval", "Nothing is saved until the health worker reviews and ticks the approval box.", "real"],
       ["Persistent local storage", "Encounters are kept in the device's database (IndexedDB) across restarts.", "real"],
@@ -40,7 +40,7 @@ export const EDGE = {
     tags: { real: "Working", sim: "Simulated", rule: "Rule-based" },
     limitsTitle: "Prototype limitations",
     limits: [
-      "Initial AI model download is about 370 MB on phones and 500 MB on computers.",
+      "One-time AI model download: about 133 MiB on phones; on computers about 461 MiB (WebGPU) or 750 MiB (CPU).",
       "CPU inference may be slow on devices without WebGPU.",
       "Synchronization is simulated in the current prototype.",
       "Deterministic rules are intentionally used for selected safety behaviors.",
@@ -72,9 +72,9 @@ export const EDGE = {
     demoIntro: "NeuroViu Bridge n'est pas un chatbot de santé. C'est un système de petite IA hors ligne, local, ancré et vérifié par un humain, pour les soins à faible connectivité.",
     features: [
       ["PWA hors ligne d'abord", "Installable ; le service worker met l'app en cache pour l'ouvrir sans internet.", "real"],
-      ["Modèle Qwen 0.5B local", "Qwen2.5-0.5B-Instruct (4 bits), téléchargé une fois et stocké sur l'appareil.", "real"],
+      ["Petit modèle de langage local", "Téléphones : SmolLM2-135M-Instruct (INT8, ~133 Mio). Ordinateurs : Qwen2.5-0.5B-Instruct (quantifié ; ~461 Mio q4f16 avec WebGPU, ~750 Mio q4 sur CPU). Téléchargé une fois et mis en cache pour l'inférence sur l'appareil.", "real"],
       ["Anglais + français", "Saisie, consignes, brouillons et interface dans les deux langues.", "real"],
-      ["Inférence sur l'appareil", "Tourne en arrière-plan via WebGPU, ou CPU (WebAssembly) en secours.", "real"],
+      ["Inférence sur l'appareil", "Transformers.js / ONNX Runtime Web en arrière-plan. Les téléphones utilisent toujours le CPU (WebAssembly) ; les ordinateurs utilisent WebGPU si possible, sinon le CPU. Aucun internet requis après la préparation.", "real"],
       ["Garde-fou d'ancrage", "La sortie du modèle est vérifiée mot à mot contre le texte du patient ; le reste est écarté.", "real"],
       ["Approbation humaine", "Rien n'est enregistré avant que l'agent vérifie et coche la case d'approbation.", "real"],
       ["Stockage local persistant", "Les consultations restent dans la base de l'appareil (IndexedDB) après redémarrage.", "real"],
@@ -85,7 +85,7 @@ export const EDGE = {
     tags: { real: "Fonctionnel", sim: "Simulé", rule: "Par règles" },
     limitsTitle: "Limites du prototype",
     limits: [
-      "Le téléchargement initial du modèle fait environ 370 Mo sur téléphone et 500 Mo sur ordinateur.",
+      "Téléchargement unique du modèle : environ 133 Mio sur téléphone ; sur ordinateur environ 461 Mio (WebGPU) ou 750 Mio (CPU).",
       "L'inférence sur CPU peut être lente sans WebGPU.",
       "La synchronisation est simulée dans ce prototype.",
       "Des règles fixes sont volontairement utilisées pour certains comportements de sécurité.",
