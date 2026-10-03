@@ -64,6 +64,22 @@ export function parseModelOutput(raw: string, lang: Lang): Summary | null {
   };
 }
 
+// Grounding check: keep model text only if most of its content words appear in the patient's own words.
+const norm = (x: string) => x.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+const NUM = /^(\d+|one|two|three|four|five|six|seven|un|une|deux|trois|quatre|cinq|sept|days?|weeks?|months?|jours?|semaines?|mois)$/;
+function grounded(piece: string, source: string) {
+  const src = norm(source);
+  const words = norm(piece).match(/[a-z0-9]{4,}/g) ?? [];
+  if (!words.length) return true;
+  const hit = words.filter((w) => NUM.test(w) || src.includes(w.slice(0, Math.max(4, Math.min(6, w.length - 1))))).length;
+  return hit / words.length >= 0.6;
+}
+function keepGrounded(value: string, source: string, sep: RegExp, joiner: string, nei: string) {
+  if (value === nei) return value;
+  const parts = value.split(sep).map((p) => p.trim()).filter(Boolean).filter((p) => grounded(p, source));
+  return parts.length ? parts.join(joiner) : nei;
+}
+
 /** Uses the local model when ready; otherwise the labelled keyword fallback. */
 export async function createDraft(text: string, lang: Lang): Promise<Draft> {
   const basic = analyze(text, lang);
@@ -73,6 +89,16 @@ export async function createDraft(text: string, lang: Lang): Promise<Draft> {
   const summary = res.type === "result" ? parseModelOutput(res.raw, lang) : null;
   if (!summary) return { ...basic, engine: "basic" };
   // Follow-up questions are prompts for the health worker, not patient facts; keep the standard checklist if the model gave none.
+  const nei = T[lang].nei, b = basic.summary;
+  summary.mainConcern = keepGrounded(summary.mainConcern, text, /$^/, "", nei);
+  summary.symptoms = keepGrounded(summary.symptoms, text, /[,;]\s*/, ", ", nei);
+  summary.context = keepGrounded(summary.context, text, /(?<=[.!?])\s+|,\s(?=[A-ZÀ-Ý])/, " ", nei);
+  summary.duration = keepGrounded(summary.duration, text, /$^/, "", nei);
+  // Where the model's text was not supported by the patient's words, fall back to the rule-based value.
+  if (summary.mainConcern === nei) summary.mainConcern = b.mainConcern;
+  if (summary.symptoms === nei) summary.symptoms = b.symptoms;
+  if (summary.context === nei) summary.context = b.context;
+  if (summary.duration === nei) summary.duration = b.duration;
   if (summary.missing === T[lang].nei) summary.missing = basic.summary.missing;
   // Danger-sign flag stays rule-based so it can never be missed by the model.
   return { summary, emergency: basic.emergency, engine: "model" };
