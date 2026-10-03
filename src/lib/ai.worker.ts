@@ -56,6 +56,7 @@ async function streamToCache(dtype: string): Promise<boolean> {
       },
     });
     const headers = new Headers(f.res.headers);
+    headers.delete("content-encoding"); headers.delete("content-length");
     await cache.put(f.url, new Response(f.res.body!.pipeThrough(counter), { status: 200, headers }));
   }
   return true;
