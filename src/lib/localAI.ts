@@ -123,6 +123,7 @@ export function keepGrounded(value: string, source: string, sep: RegExp, joiner:
 /** Uses the local model when ready; otherwise the labelled keyword fallback. */
 export async function createDraft(text: string, lang: Lang): Promise<Draft> {
   const basic = analyze(text, lang);
+  if (import.meta.env.DEV) console.debug("[ai raw] start", state.status, !!worker);
   if (state.status !== "ready" || !worker) return { ...basic, engine: "basic" };
   const id = crypto.randomUUID();
   ls.set(BUSY_KEY, "1");
